@@ -138,7 +138,7 @@ CUSTOM_DELETER_UNIQUE_POINTER(X509_NAME_ENTRY, X509_NAME_ENTRY_free);
 
 namespace internal {
 
-template<typename T, typename TSelf, typename Tag>
+template<typename T, typename TSelf, typename IsUptrTag>
 class AddValueRef {};
 
 template<typename T, typename TSelf>
@@ -181,45 +181,84 @@ template<typename T>
 class Expected : public internal::AddValueRef<T, Expected<T>, typename internal::is_uptr<T>::type>
 {
 public: 
-  template
+  /*template
   < 
     typename T_ = T,
     typename = typename std::enable_if<std::is_default_constructible<T_>::value>::type
-  >
+  >*/
   explicit Expected(unsigned long opensslErrorCode)
-    : m_value {}, m_opensslErrCode{opensslErrorCode} {}  
+    : m_opensslErrCode{opensslErrorCode}, m_hasValue {false} {}  
 
-  explicit Expected(unsigned long opensslErrorCode, T &&value)
-    : m_value {std::move(value)}, m_opensslErrCode{opensslErrorCode} {}
+  explicit Expected(T &&value)
+    : m_value {std::move(value)}, m_hasValue {true} {}
+
+
+  Expected() : m_hasValue{false} {}
+  /*template
+  <
+//    typename T_ = T,
+    typename = typename std::enable_if<!internal::is_uptr<T>::value>::type
+  >*/
+  Expected(const Expected<T> &o) : m_hasValue{o.m_hasValue.bit}
+  {
+    static_assert(!internal::is_uptr<T>::value, "Cannot copy uptr");
+    if(o.hasValue())
+      new (&m_value)T(o.m_value);
+  }
+
+//  Expected(Expected<T>&&) = default;
+
+  ~Expected()
+  {
+    if(hasValue())
+      m_value.~T();
+  }
+
+//  Expected<T>& operator=(const Expected<T>&) = default;
+//  Expected<T>& operator=(Expected<T>&&) = default;
+
+//  Expected(Expected<T>&&) = default;
+//  Expected<T>& operator=(Expected<T>&&) = default;
      
   explicit operator bool() const noexcept
   {
     return hasValue(); 
   }
- 
+  
+  template
+  < 
+    typename T_ = T,
+    typename = typename std::enable_if<std::is_default_constructible<T_>::value>::type
+  >
   T&& moveValue()
   {
-    return std::move(m_value);
+    if(hasValue())
+      return std::move(m_value);
+
+    return T{};
+  } 
+
+  bool hasValue() const noexcept
+  { 
+    return m_hasValue.bit;
   }
 
   unsigned long errorCode() const noexcept
   {
-    return m_opensslErrCode;
-  }
+    if(hasValue())
+      return 0;
 
-  bool hasValue() const noexcept
-  { 
-    return !hasError(); 
-  }
+    return m_opensslErrCode;
+  } 
 
   bool hasError() const noexcept
   {
-    return 0 != m_opensslErrCode;
+    return !hasValue();
   }
 
   std::string msg() const
   {
-    if(0 == m_opensslErrCode)
+    if(0 == errorCode())
       return "ok";
 
     return internal::errCodeToString(m_opensslErrCode); 
@@ -228,8 +267,15 @@ public:
 private:
   friend internal::AddValueRef<T, Expected<T>, typename internal::is_uptr<T>::type>;
 
-  T m_value;
-  unsigned long m_opensslErrCode;
+  union {
+    T m_value;
+    unsigned long m_opensslErrCode;
+  };
+
+  // TODO: This could be const but it can prevent movability of whole Expected<>, hmm....
+  struct HasValue{
+    bool bit : 1;
+  } m_hasValue;
 };
 
 template<>
@@ -604,13 +650,20 @@ namespace internal {
   {
     using type = typename std::remove_pointer<decltype(std::declval<T>().get())>::type;
   };
+  
+  template<typename T>
+  SO_PRV Expected<T> err(unsigned long errCode)
+  { 
+    return Expected<T>(errCode);
+  }
 
   template<typename T>
-  SO_PRV Expected<T> err(T &&val)
+  SO_PRV Expected<T> err()
   {
-    return Expected<T>(ERR_get_error(), std::move(val));
+    return err<T>(ERR_get_error());
   }
- 
+
+  /*
   template
   <
     typename T,
@@ -632,17 +685,12 @@ namespace internal {
     auto tmp = make_unique<typename uptr_underlying_type<T>::type>(nullptr);
     return internal::err(std::move(tmp));
   }
-
-  template<typename T>
-  SO_PRV Expected<T> err(unsigned long errCode)
-  { 
-    return Expected<T>(errCode);
-  }
-
+*/
+  
   template<typename T>
   SO_PRV Expected<T> ok(T &&val)
   {
-    return Expected<T>(0, std::move(val));
+    return Expected<T>(std::move(val));
   }
 
   SO_PRV Expected<void> err()
@@ -826,7 +874,7 @@ namespace internal {
           static_cast<int>(signature.size()),
           &publicKey))
     {
-      return internal::err(false);
+      return internal::err<bool>();
     }
 
     return internal::ok(true);
@@ -865,13 +913,13 @@ namespace internal {
   {
     auto ctx = make_unique(EVP_MD_CTX_new());
     if (!ctx)
-      return internal::err(false);
+      return internal::err<bool>();
 
     if (1 != EVP_DigestVerifyInit(ctx.get(), nullptr, evpMd, nullptr, &pubKey))
-      return internal::err(false);
+      return internal::err<bool>();
     
     if(1 != EVP_DigestVerifyUpdate(ctx.get(), msg.data(), msg.size()))
-      return internal::err(false); 
+      return internal::err<bool>(); 
    
     const int result = EVP_DigestVerifyFinal(ctx.get(), sig.data(), sig.size());
     return result == 1 ? internal::ok(true) : result == 0 ? internal::ok(false) : internal::err<bool>();
@@ -914,7 +962,7 @@ namespace internal {
           static_cast<unsigned int>(signature.size()),
           &pubKey))
     {
-      return internal::err(false);
+      return internal::err<bool>();
     }
     
     return internal::ok(true);
@@ -1300,7 +1348,7 @@ namespace ecdsa {
   SO_API Expected<bool> checkKey(const EC_KEY &ecKey)
   {
     if(1 != EC_KEY_check_key(&ecKey))
-      return internal::err(false);
+      return internal::err<bool>();
 
     return internal::ok(true);
   }
@@ -1764,7 +1812,7 @@ namespace rsa {
   SO_API Expected<bool> checkKey(RSA &rsa)
   {
     if(1 != RSA_check_key_ex(&rsa, nullptr))
-      return internal::err(false);
+      return internal::err<bool>();
     
     return internal::ok(true);
   }
@@ -2149,7 +2197,7 @@ namespace x509 {
   SO_API Expected<bool> verifySignature(X509 &cert, EVP_PKEY &pkey)
   {
     const int result = X509_verify(&cert, &pkey);
-    return result == 1 ? internal::ok(true) : result == 0 ? internal::ok(false) : internal::err(false);
+    return result == 1 ? internal::ok(true) : result == 0 ? internal::ok(false) : internal::err<bool>();
   }
 
   SO_API Expected<Version> getVersion(const X509 &cert)
