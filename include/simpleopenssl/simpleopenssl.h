@@ -177,8 +177,89 @@ struct X509Extension
 SO_PRV std::string errCodeToString(unsigned long errCode);
 } //namespace internal
 
+template<typename T, bool B = internal::is_uptr<T>::value>
+class Expected {};
+
 template<typename T>
-class Expected : public internal::AddValueRef<T, Expected<T>, typename internal::is_uptr<T>::type>
+class Expected<T, true> : public internal::AddValueRef<T, Expected<T>, std::true_type>
+{
+public:
+  explicit Expected(unsigned long opensslErrorCode)
+    : m_opensslErrCode{opensslErrorCode}, m_hasValue {false} {}  
+
+  explicit Expected(unsigned long value, bool hasValue)
+    : m_hasValue {hasValue}
+  {
+    if(m_hasValue.bit)
+      m_value = value;
+    else
+      m_opensslErrCode = value;
+  }
+
+  explicit Expected(T &&value)
+    : m_value {std::move(value)}, m_hasValue {true} {}
+  
+  ~Expected()
+  {
+    if(hasValue())
+      m_value.~T();
+  }
+
+  explicit operator bool() const noexcept
+  {
+    return hasValue(); 
+  }
+   
+  T&& moveValue()
+  {
+    if(hasValue())
+      return std::move(m_value);
+
+    return nullptr;
+  } 
+
+  bool hasValue() const noexcept
+  { 
+    return m_hasValue.bit;
+  }
+
+  unsigned long errorCode() const noexcept
+  {
+    if(hasValue())
+      return 0;
+
+    return m_opensslErrCode;
+  } 
+
+  bool hasError() const noexcept
+  {
+    return !hasValue();
+  }
+
+  std::string msg() const
+  {
+    if(0 == errorCode())
+      return "ok";
+
+    return internal::errCodeToString(m_opensslErrCode); 
+  }
+
+private:
+  friend internal::AddValueRef<T, Expected<T>, std::true_type>;
+
+  union {
+    T m_value;
+    unsigned long m_opensslErrCode;
+  };
+
+  // TODO: This could be const but it can prevent movability of whole Expected<>, hmm....
+  struct HasValue{
+    bool bit : 1;
+  } m_hasValue;
+};
+
+template<typename T>
+class Expected<T, false> : public internal::AddValueRef<T, Expected<T>, std::false_type>
 {
 public: 
   /*template
@@ -189,47 +270,35 @@ public:
   explicit Expected(unsigned long opensslErrorCode)
     : m_opensslErrCode{opensslErrorCode}, m_hasValue {false} {}  
 
+  explicit Expected(unsigned long value, bool hasValue)
+    : m_hasValue {hasValue}
+  {
+    if(m_hasValue.bit)
+      m_value = value;
+    else
+      m_opensslErrCode = value;
+  }
+
   explicit Expected(T &&value)
     : m_value {std::move(value)}, m_hasValue {true} {}
-
-
-  Expected() : m_hasValue{false} {}
-  /*template
-  <
-//    typename T_ = T,
-    typename = typename std::enable_if<!internal::is_uptr<T>::value>::type
-  >*/
+ 
   Expected(const Expected<T> &o) : m_hasValue{o.m_hasValue.bit}
   {
-    static_assert(!internal::is_uptr<T>::value, "Cannot copy uptr");
     if(o.hasValue())
       new (&m_value)T(o.m_value);
   }
-
-//  Expected(Expected<T>&&) = default;
-
+  
   ~Expected()
   {
     if(hasValue())
       m_value.~T();
   }
-
-//  Expected<T>& operator=(const Expected<T>&) = default;
-//  Expected<T>& operator=(Expected<T>&&) = default;
-
-//  Expected(Expected<T>&&) = default;
-//  Expected<T>& operator=(Expected<T>&&) = default;
-     
+  
   explicit operator bool() const noexcept
   {
     return hasValue(); 
   }
-  
-  template
-  < 
-    typename T_ = T,
-    typename = typename std::enable_if<std::is_default_constructible<T_>::value>::type
-  >
+   
   T&& moveValue()
   {
     if(hasValue())
@@ -645,24 +714,31 @@ namespace internal {
     return std::string(buff);
   }
 
+  /*
   template<typename T>
   struct uptr_underlying_type
   {
     using type = typename std::remove_pointer<decltype(std::declval<T>().get())>::type;
   };
+  */
   
   template<typename T>
-  SO_PRV Expected<T> err(unsigned long errCode)
+  Expected<T> err(unsigned long errCode)
   { 
     return Expected<T>(errCode);
   }
 
   template<typename T>
-  SO_PRV Expected<T> err()
+  Expected<T> err()
   {
     return err<T>(ERR_get_error());
   }
-
+ 
+  template<> 
+  Expected<unsigned long> err<unsigned long>()
+  {
+    return Expected<unsigned long>(ERR_get_error(), false);
+  }
   /*
   template
   <
@@ -691,6 +767,11 @@ namespace internal {
   SO_PRV Expected<T> ok(T &&val)
   {
     return Expected<T>(std::move(val));
+  }
+
+  SO_PRV Expected<unsigned long> ok(unsigned long val)
+  {
+    return Expected<unsigned long>(val, true);
   }
 
   SO_PRV Expected<void> err()
@@ -805,6 +886,7 @@ namespace internal {
   {
     auto name = make_unique(X509_NAME_new()); 
 
+//    const auto err = []{ return Expected<X509_NAME_uptr>(ERR_get_error()); };
     const auto err = []{ return internal::err<X509_NAME_uptr>(); };
     const auto append = [](X509_NAME *nm, int nid, const std::string &val) {
       return val.empty() || X509_NAME_add_entry_by_NID(nm, nid, MBSTRING_ASC, reinterpret_cast<const unsigned char*>(val.c_str()), -1, -1, 0);
