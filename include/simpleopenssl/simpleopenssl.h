@@ -198,7 +198,13 @@ public:
 
   explicit Expected(T &&value)
     : m_value {std::move(value)}, m_hasValue {true} {}
-  
+
+  Expected(Expected<T> &&o) : m_hasValue{o.m_hasValue.bit}
+  {
+    if(hasValue())
+      m_value = std::move(o.m_value);
+  }
+
   ~Expected()
   {
     if(hasValue())
