@@ -153,6 +153,12 @@ template<typename T, typename TSelf>
 class AddValueRef<T, TSelf, std::true_type>
 {};
 
+template<typename T>
+struct uptr_underlying_type
+{
+  using type = typename std::remove_pointer<decltype(std::declval<T>().get())>::type;
+};
+  
 template<typename ID>
 struct X509Extension
 {
@@ -221,7 +227,8 @@ public:
     if(hasValue())
       return std::move(m_value);
 
-    return nullptr;
+    auto tmp = make_unique<typename internal::uptr_underlying_type<T>::type>(nullptr);
+    return std::move(tmp);
   } 
 
   bool hasValue() const noexcept
@@ -310,7 +317,7 @@ public:
     if(hasValue())
       return std::move(m_value);
 
-    return T{};
+    return std::move(T{});
   } 
 
   bool hasValue() const noexcept
@@ -340,7 +347,7 @@ public:
   }
 
 private:
-  friend internal::AddValueRef<T, Expected<T>, typename internal::is_uptr<T>::type>;
+  friend internal::AddValueRef<T, Expected<T>, std::false_type>;
 
   union {
     T m_value;
@@ -719,23 +726,15 @@ namespace internal {
     ERR_error_string_n(errCode, buff, SIZE);
     return std::string(buff);
   }
-
-  /*
+ 
   template<typename T>
-  struct uptr_underlying_type
-  {
-    using type = typename std::remove_pointer<decltype(std::declval<T>().get())>::type;
-  };
-  */
-  
-  template<typename T>
-  Expected<T> err(unsigned long errCode)
+  SO_PRV Expected<T> err(unsigned long errCode)
   { 
     return Expected<T>(errCode);
   }
 
   template<typename T>
-  Expected<T> err()
+  SO_PRV Expected<T> err()
   {
     return err<T>(ERR_get_error());
   }
