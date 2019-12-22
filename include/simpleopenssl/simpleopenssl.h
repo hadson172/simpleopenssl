@@ -292,6 +292,12 @@ public:
 
   explicit Expected(T &&value)
     : m_value {std::move(value)}, m_hasValue {true} {}
+
+  Expected(Expected<T> &&o) : m_hasValue{o.m_hasValue.bit}
+  {
+    if(hasValue())
+      m_value = std::move(o.m_value);
+  }
  
   Expected(const Expected<T> &o) : m_hasValue{o.m_hasValue.bit}
   {
@@ -777,29 +783,7 @@ namespace internal {
   {
     return Expected<unsigned long>(ERR_get_error(), false);
   }
-  /*
-  template
-  <
-    typename T,
-    typename std::enable_if<!internal::is_uptr<T>::value, int>::type = 0
-  >
-  SO_PRV Expected<T> err()
-  {
-    return internal::err<T>({});
-  }
-
-  template
-  <
-    typename T,
-    typename std::enable_if<internal::is_uptr<T>::value, int>::type = 0
-  >
-  SO_PRV Expected<T> err()
-  {
-    auto tmp = make_unique<typename uptr_underlying_type<T>::type>(nullptr);
-    return internal::err(std::move(tmp));
-  }
-*/
-  
+    
   template<typename T>
   SO_PRV Expected<T> ok(T &&val)
   {
