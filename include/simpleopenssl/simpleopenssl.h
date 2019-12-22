@@ -191,7 +191,7 @@ template<typename T, typename B = typename internal::is_uptr<T>::type>
 class Expected {};
 
 template<typename T>
-class Expected<T, std::true_type> //: public internal::AddValueRef<T, Expected<T>, std::true_type>
+class Expected<T, std::true_type>
 {
 public:
   explicit Expected(unsigned long opensslErrorCode)
@@ -262,8 +262,6 @@ public:
   }
 
 private:
-//  friend internal::AddValueRef<T, Expected<T>, std::true_type>;
-
   union {
     T m_value;
     unsigned long m_opensslErrCode;
@@ -381,34 +379,52 @@ template<>
 class Expected<void>
 {
 public:
+  Expected()
+    : m_hasValue{true} {}
+
   explicit Expected(unsigned long opensslErrorCode)
-    : m_opensslErrCode{opensslErrorCode} {}
+    : m_opensslErrCode{opensslErrorCode}, m_hasValue{false} {}
  
   explicit operator bool() const noexcept
   {
-    return !hasError();
+    return hasValue();
   }
 
-  bool hasError() const noexcept
-  {
-    return 0 != m_opensslErrCode;
+  bool hasValue() const noexcept
+  { 
+    return m_hasValue.bit;
   }
 
   unsigned long errorCode() const noexcept
   {
+    if(hasValue())
+      return 0;
+
     return m_opensslErrCode;
+  } 
+
+  bool hasError() const noexcept
+  {
+    return !hasValue();
   }
 
   std::string msg() const
   {
-    if(0 == m_opensslErrCode)
+    if(0 == errorCode())
       return "ok";
 
     return internal::errCodeToString(m_opensslErrCode); 
   }
 
 private:
-  unsigned long m_opensslErrCode;
+  union {
+    unsigned long m_opensslErrCode;
+  };
+
+  // TODO: This could be const but it can prevent movability of whole Expected<>, hmm....
+  struct HasValue{
+    bool bit : 1;
+  } m_hasValue;
 };
 
 
@@ -807,7 +823,7 @@ namespace internal {
 
   SO_PRV Expected<void> ok()
   {
-    return Expected<void>(0);
+    return Expected<void>();
   }
  
   SO_PRV Expected<std::string> nameEntry2String(X509_NAME &name, int nid)
