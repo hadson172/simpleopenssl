@@ -191,7 +191,7 @@ template<typename T, typename B = typename internal::is_uptr<T>::type>
 class Expected {};
 
 template<typename T>
-class Expected<T, std::true_type>
+class Expected<T, std::true_type> final
 {
 public:
   explicit Expected(unsigned long opensslErrorCode)
@@ -200,7 +200,7 @@ public:
   explicit Expected(unsigned long value, bool hasValue)
     : m_hasValue {hasValue}
   {
-    if(m_hasValue.bit)
+    if(m_hasValue)
       m_value = value;
     else
       m_opensslErrCode = value;
@@ -209,7 +209,7 @@ public:
   explicit Expected(T &&value)
     : m_value {std::move(value)}, m_hasValue {true} {}
 
-  Expected(Expected<T> &&o) : m_hasValue{o.m_hasValue.bit}
+  Expected(Expected<T> &&o) : m_hasValue{o.m_hasValue}
   {
     if(hasValue())
       m_value = std::move(o.m_value);
@@ -237,7 +237,7 @@ public:
 
   bool hasValue() const noexcept
   { 
-    return m_hasValue.bit;
+    return m_hasValue;
   }
 
   unsigned long errorCode() const noexcept
@@ -268,13 +268,11 @@ private:
   };
 
   // TODO: This could be const but it can prevent movability of whole Expected<>, hmm....
-  struct HasValue{
-    bool bit : 1;
-  } m_hasValue;
+  bool m_hasValue; 
 };
 
 template<typename T>
-class Expected<T, std::false_type>
+class Expected<T, std::false_type> final
 {
 public: 
   
@@ -284,7 +282,7 @@ public:
   explicit Expected(unsigned long value, bool hasValue)
     : m_hasValue {hasValue}
   {
-    if(m_hasValue.bit)
+    if(m_hasValue)
       m_value = value;
     else
       m_opensslErrCode = value;
@@ -293,13 +291,13 @@ public:
   explicit Expected(T &&value)
     : m_value {std::move(value)}, m_hasValue {true} {}
 
-  Expected(Expected<T> &&o) : m_hasValue{o.m_hasValue.bit}
+  Expected(Expected<T> &&o) : m_hasValue{o.m_hasValue}
   {
     if(hasValue())
       m_value = std::move(o.m_value);
   }
  
-  Expected(const Expected<T> &o) : m_hasValue{o.m_hasValue.bit}
+  Expected(const Expected<T> &o) : m_hasValue{o.m_hasValue}
   {
     if(o.hasValue())
       new (&m_value)T(o.m_value);
@@ -345,7 +343,7 @@ public:
 
   bool hasValue() const noexcept
   { 
-    return m_hasValue.bit;
+    return m_hasValue;
   }
 
   unsigned long errorCode() const noexcept
@@ -376,13 +374,11 @@ private:
   };
 
   // TODO: This could be const but it can prevent movability of whole Expected<>, hmm....
-  struct HasValue{
-    bool bit : 1;
-  } m_hasValue;
+  bool m_hasValue; 
 };
 
 template<>
-class Expected<void>
+class Expected<void> final
 {
 public:
   Expected()
@@ -398,7 +394,7 @@ public:
 
   bool hasValue() const noexcept
   { 
-    return m_hasValue.bit;
+    return m_hasValue;
   }
 
   unsigned long errorCode() const noexcept
@@ -428,9 +424,7 @@ private:
   };
 
   // TODO: This could be const but it can prevent movability of whole Expected<>, hmm....
-  struct HasValue{
-    bool bit : 1;
-  } m_hasValue;
+  bool m_hasValue;
 };
 
 

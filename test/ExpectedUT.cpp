@@ -36,7 +36,6 @@ TEST(ExpectedUT, errUsageWithBytes)
   EXPECT_FALSE(expected.hasValue());
   EXPECT_TRUE(expected.hasError());
   EXPECT_EQ(static_cast<unsigned long>(5), expected.errorCode());
-  EXPECT_EQ((::so::Bytes{}), *expected);
   EXPECT_EQ((::so::Bytes{}), expected.valueOr(::so::Bytes{}));
   EXPECT_EQ(32, sizeof(expected));
 }
