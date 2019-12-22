@@ -765,7 +765,7 @@ namespace internal {
   template
   <
     typename T,
-    typename = typename std::enable_if<!internal::is_uptr<T>::value>::type
+    typename std::enable_if<!internal::is_uptr<T>::value, int>::type = 0
   >
   SO_PRV Expected<T> err()
   {
@@ -775,8 +775,7 @@ namespace internal {
   template
   <
     typename T,
-    typename T_ = T, // TODO: T_ is placeholder to avoid of 'reassining default template param' error, I should use some smarter solution
-    typename = typename std::enable_if<internal::is_uptr<T>::value>::type
+    typename std::enable_if<internal::is_uptr<T>::value, int>::type = 0
   >
   SO_PRV Expected<T> err()
   {
