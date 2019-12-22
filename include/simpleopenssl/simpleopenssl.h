@@ -147,6 +147,10 @@ class AddValueRef<T, TSelf, std::false_type>
 public:
   const T& operator*() const { return value(); }
   const T& value() const { return static_cast<const TSelf*>(this)->m_value; }
+  
+
+  //template<typename U>
+  //T valueOr(U &&defaultValue) const { return static_cast<const TSelf*>(this)->m_value; }
 };
 
 template<typename T, typename TSelf>
@@ -183,11 +187,11 @@ struct X509Extension
 SO_PRV std::string errCodeToString(unsigned long errCode);
 } //namespace internal
 
-template<typename T, bool B = internal::is_uptr<T>::value>
+template<typename T, typename B = typename internal::is_uptr<T>::type>
 class Expected {};
 
 template<typename T>
-class Expected<T, true> : public internal::AddValueRef<T, Expected<T>, std::true_type>
+class Expected<T, std::true_type> //: public internal::AddValueRef<T, Expected<T>, std::true_type>
 {
 public:
   explicit Expected(unsigned long opensslErrorCode)
@@ -258,7 +262,7 @@ public:
   }
 
 private:
-  friend internal::AddValueRef<T, Expected<T>, std::true_type>;
+//  friend internal::AddValueRef<T, Expected<T>, std::true_type>;
 
   union {
     T m_value;
@@ -272,14 +276,10 @@ private:
 };
 
 template<typename T>
-class Expected<T, false> : public internal::AddValueRef<T, Expected<T>, std::false_type>
+class Expected<T, std::false_type>
 {
 public: 
-  /*template
-  < 
-    typename T_ = T,
-    typename = typename std::enable_if<std::is_default_constructible<T_>::value>::type
-  >*/
+  
   explicit Expected(unsigned long opensslErrorCode)
     : m_opensslErrCode{opensslErrorCode}, m_hasValue {false} {}  
 
@@ -320,6 +320,25 @@ public:
     return std::move(T{});
   } 
 
+  const T& operator*() const
+  {
+    return value();
+  }
+
+  const T& value() const
+  {
+    return m_value;
+  }
+
+  template<typename U>
+  T valueOr(U &&defaultValue) const
+  {
+    if(hasValue())
+      return value();
+
+    return std::move(defaultValue);
+  }
+
   bool hasValue() const noexcept
   { 
     return m_hasValue.bit;
@@ -347,8 +366,6 @@ public:
   }
 
 private:
-  friend internal::AddValueRef<T, Expected<T>, std::false_type>;
-
   union {
     T m_value;
     unsigned long m_opensslErrCode;
