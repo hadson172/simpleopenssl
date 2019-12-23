@@ -51,6 +51,7 @@
 #include <ctime>
 #include <chrono>
 #include <tuple>
+#include <cassert>
 
 namespace so {
 
@@ -207,12 +208,14 @@ public:
   }
 
   explicit Expected(T &&value)
-    : m_value {std::move(value)}, m_hasValue {true} {}
-
+    : m_value{std::move(value)}, m_hasValue {true} {}
+  
   Expected(Expected<T> &&o) : m_hasValue{o.m_hasValue}
   {
     if(o.hasValue())
-      new (&m_value) T (std::forward<T>(o.m_value));
+      m_value = std::move(o.m_value);
+    else
+      m_opensslErrCode = o.m_opensslErrCode;
   }
 
   ~Expected()
@@ -288,18 +291,22 @@ public:
   }
 
   explicit Expected(T &&value)
-    : m_value {std::move(value)}, m_hasValue {true} {}
+    : m_value {std::move(value)}, m_hasValue {true} {} 
 
   Expected(Expected<T> &&o) : m_hasValue{o.m_hasValue}
   {
     if(o.hasValue())
-      new (&m_value) T (std::forward<T>(o.m_value));
+      m_value = std::move(o.m_value);
+    else
+      m_opensslErrCode = o.m_opensslErrCode;
   }
  
   Expected(const Expected<T> &o) : m_hasValue{o.m_hasValue}
   {
     if(o.hasValue())
       new (&m_value)T(o.m_value);
+    else
+      m_opensslErrCode = o.m_opensslErrCode;
   }
   
   ~Expected()
@@ -328,6 +335,7 @@ public:
 
   const T& value() const
   {
+    assert(m_hasValue && "Illegal call to Expected::value() on empty object");
     return m_value;
   }
 
