@@ -208,12 +208,15 @@ public:
   }
 
   explicit Expected(T &&value)
-    : m_value{std::move(value)}, m_hasValue {true} {}
+    : m_hasValue {true}
+  {
+    ::new (&m_value) T (std::move(value));
+  }
   
   Expected(Expected<T> &&o) : m_hasValue{o.m_hasValue}
   {
     if(o.hasValue())
-      m_value = std::move(o.m_value);
+      ::new (&m_value) T (std::move(o.m_value));
     else
       m_opensslErrCode = o.m_opensslErrCode;
   }
@@ -296,7 +299,7 @@ public:
   Expected(Expected<T> &&o) : m_hasValue{o.m_hasValue}
   {
     if(o.hasValue())
-      m_value = std::move(o.m_value);
+      ::new (&m_value) T (std::move(o.m_value));
     else
       m_opensslErrCode = o.m_opensslErrCode;
   }
