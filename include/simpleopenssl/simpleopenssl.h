@@ -377,53 +377,40 @@ private:
 };
 
 template<>
-class Expected<void> final
+class Expected<void>
 {
 public:
   Expected()
-    : m_hasValue{true} {}
+    : m_opensslErrCode{0} {}
 
   explicit Expected(unsigned long opensslErrorCode)
-    : m_opensslErrCode{opensslErrorCode}, m_hasValue{false} {}
+    : m_opensslErrCode{opensslErrorCode} {}
  
   explicit operator bool() const noexcept
   {
-    return hasValue();
+    return !hasError();
   }
 
-  bool hasValue() const noexcept
-  { 
-    return m_hasValue;
+  bool hasError() const noexcept
+  {
+    return 0 != m_opensslErrCode;
   }
 
   unsigned long errorCode() const noexcept
   {
-    if(hasValue())
-      return 0;
-
     return m_opensslErrCode;
-  } 
-
-  bool hasError() const noexcept
-  {
-    return !hasValue();
   }
 
   std::string msg() const
   {
-    if(0 == errorCode())
+    if(!hasError())
       return "ok";
 
     return internal::errCodeToString(m_opensslErrCode); 
   }
 
 private:
-  union {
-    unsigned long m_opensslErrCode;
-  };
-
-  // TODO: This could be const but it can prevent movability of whole Expected<>, hmm....
-  bool m_hasValue;
+  unsigned long m_opensslErrCode;
 };
 
 
