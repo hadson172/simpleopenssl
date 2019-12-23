@@ -211,8 +211,8 @@ public:
 
   Expected(Expected<T> &&o) : m_hasValue{o.m_hasValue}
   {
-    if(hasValue())
-      m_value = std::move(o.m_value);
+    if(o.hasValue())
+      new (&m_value) T (std::forward<T>(o.m_value));
   }
 
   ~Expected()
@@ -231,8 +231,7 @@ public:
     if(hasValue())
       return std::move(m_value);
 
-    auto tmp = make_unique<typename internal::uptr_underlying_type<T>::type>(nullptr);
-    return std::move(tmp);
+    return std::move(make_unique<typename internal::uptr_underlying_type<T>::type>(nullptr));
   } 
 
   bool hasValue() const noexcept
@@ -293,8 +292,8 @@ public:
 
   Expected(Expected<T> &&o) : m_hasValue{o.m_hasValue}
   {
-    if(hasValue())
-      m_value = std::move(o.m_value);
+    if(o.hasValue())
+      new (&m_value) T (std::forward<T>(o.m_value));
   }
  
   Expected(const Expected<T> &o) : m_hasValue{o.m_hasValue}
